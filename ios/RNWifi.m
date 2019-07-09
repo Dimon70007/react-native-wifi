@@ -2,7 +2,7 @@
 #import <NetworkExtension/NetworkExtension.h>
 #import <SystemConfiguration/CaptiveNetwork.h>
 // If using official settings URL
-//#import <UIKit/UIKit.h>
+#import <UIKit/UIKit.h>
 
 @implementation WifiManager
 RCT_EXPORT_MODULE();
@@ -88,8 +88,9 @@ RCT_REMAP_METHOD(getCurrentWifiSSID,
 
 - (NSDictionary*)constantsToExport {
     // Officially better to use UIApplicationOpenSettingsURLString
+    NSURL *url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
     return @{
-             @"settingsURL": @"App-Prefs:root=WIFI"
+             @"settingsURL": url.absoluteString
              };
 }
 
