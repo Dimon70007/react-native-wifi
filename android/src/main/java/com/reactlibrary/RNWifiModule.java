@@ -12,6 +12,11 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.facebook.react.shell.MainReactPackage;
 import com.facebook.soloader.SoLoader;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.nfc.Tag;
 import android.provider.Settings;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
@@ -29,6 +34,9 @@ import android.content.IntentFilter;
 import android.content.BroadcastReceiver;
 import android.os.Build;
 import android.os.Bundle;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
+import android.util.Log;
 import android.widget.Toast;
 import java.util.List;
 import java.lang.Thread;
@@ -38,7 +46,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public class RNWifiModule extends ReactContextBaseJavaModule {
-
+	private static final int MY_PERMISSION_ACCESS_COARSE_LOCATION = 11;
+	private static final int MY_PERMISSION_ACCESS_FINE_LOCATION = 12;
 	//WifiManager Instance
 	WifiManager wifi;
 	ReactApplicationContext context;
@@ -72,8 +81,10 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
             wifiObject.put("capabilities", result.capabilities);
             wifiObject.put("frequency", result.frequency);
             wifiObject.put("level", result.level);
-            wifiObject.put("timestamp", result.timestamp);
-            //Other fields not added
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+				wifiObject.put("timestamp", result.timestamp);
+			}
+						//Other fields not added
             //wifiObject.put("operatorFriendlyName", result.operatorFriendlyName);
             //wifiObject.put("venueName", result.venueName);
             //wifiObject.put("centerFreq0", result.centerFreq0);
@@ -137,10 +148,6 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
                             } else {
                                 //This method was deprecated in API level 23
                                 ConnectivityManager.setProcessDefaultNetwork(network);
-                            }
-                            try {
-                            } catch (Exception e) {
-                                e.printStackTrace();
                             }
                             manager.unregisterNetworkCallback(this);
                         }
@@ -252,7 +259,9 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 		} else {
 			conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
 		}
-
+		if (!checkPermissions()) {
+			return false;
+		}
 		//Remove the existing configuration for this netwrok
 		List<WifiConfiguration> mWifiConfigList = wifi.getConfiguredNetworks();
 
@@ -298,13 +307,17 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 	@ReactMethod
 	public void getCurrentWifiSSID(final Promise promise) {
 		WifiInfo info = wifi.getConnectionInfo();
-
-		// This value should be wrapped in double quotes, so we need to unwrap it.
-		String ssid = info.getSSID();
-		if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
-			ssid = ssid.substring(1, ssid.length() - 1);
+		String ssid = "<unknown ssid>";
+		try {
+			// This value should be wrapped in double quotes, so we need to unwrap it.
+			ssid = info.getSSID();
+			if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
+				ssid = ssid.substring(1, ssid.length() - 1);
+			}
+		}catch (Exception ex) {
+			Log.e(getClass().getName(), "Failed to getCurrentWifiSSID", ex);
+			promise.resolve("<unknown ssid>");
 		}
-
 		promise.resolve(ssid);
 	}
 
@@ -329,7 +342,10 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 	@ReactMethod
 	public void getFrequency(final Callback callback) {
 		WifiInfo info = wifi.getConnectionInfo();
-		int frequency = info.getFrequency();
+		int frequency = 0;
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+			frequency = info.getFrequency();
+		}
 		callback.invoke(frequency);
 	}
 
@@ -344,16 +360,20 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 	//This method will remove the wifi network as per the passed SSID from the device list
 	@ReactMethod
 	public void isRemoveWifiNetwork(String ssid, final Callback callback) {
-    List<WifiConfiguration> mWifiConfigList = wifi.getConfiguredNetworks();
-    for (WifiConfiguration wifiConfig : mWifiConfigList) {
-				String comparableSSID = ('"' + ssid + '"'); //Add quotes because wifiConfig.SSID has them
-				if(wifiConfig.SSID.equals(comparableSSID)) {
-					wifi.removeNetwork(wifiConfig.networkId);
-					wifi.saveConfiguration();
-					callback.invoke(true);
-					return;
-				}
-    }
+		if (!checkPermissions()) {
+			callback.invoke(false);
+			return;
+		}
+		List<WifiConfiguration> mWifiConfigList = wifi.getConfiguredNetworks();
+		for (WifiConfiguration wifiConfig : mWifiConfigList) {
+			String comparableSSID = ('"' + ssid + '"'); //Add quotes because wifiConfig.SSID has them
+			if(wifiConfig.SSID.equals(comparableSSID)) {
+				wifi.removeNetwork(wifiConfig.networkId);
+				wifi.saveConfiguration();
+				callback.invoke(true);
+				return;
+			}
+		}
 		callback.invoke(false);
 	}
 
@@ -361,8 +381,12 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 	@ReactMethod
 	public void reScanAndLoadWifiList(Callback successCallback, Callback errorCallback) {
 		WifiReceiver receiverWifi = new WifiReceiver(wifi, successCallback, errorCallback);
-   	getReactApplicationContext().getCurrentActivity().registerReceiver(receiverWifi, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
-    wifi.startScan();
+
+		Activity currentActivity = getCurrentActivity();
+		if (currentActivity != null) {
+   			currentActivity.registerReceiver(receiverWifi, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+			wifi.startScan();
+		}
 	}
 
 	public static String longToIP(int longIp){
@@ -380,6 +404,23 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 		sb.append(".");
 		sb.append(strip[3]);
 		return sb.toString();
+	}
+
+	private boolean checkPermissions() {
+		if (ContextCompat.checkSelfPermission(this.getReactApplicationContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+			try {
+				Activity activity = getCurrentActivity();
+				if (activity != null) {
+					ActivityCompat.requestPermissions(activity,
+							new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+							MY_PERMISSION_ACCESS_COARSE_LOCATION);
+				}
+			} catch (Exception ex) {
+				Log.e(getClass().getName(), "Request permissions failed: ", ex);
+				return false;
+			}
+		}
+		return true;
 	}
 
 	class WifiReceiver extends BroadcastReceiver {
@@ -413,7 +454,9 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 		            wifiObject.put("capabilities", result.capabilities);
 		            wifiObject.put("frequency", result.frequency);
 		            wifiObject.put("level", result.level);
-		            wifiObject.put("timestamp", result.timestamp);
+					if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+						wifiObject.put("timestamp", result.timestamp);
+					}
 							} catch (JSONException e) {
 		          	this.errorCallback.invoke(e.getMessage());
 								return;
