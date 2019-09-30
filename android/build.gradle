@@ -1,18 +1,43 @@
-apply plugin: 'com.android.library'
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
 
-android {
-    compileSdkVersion 23
-    buildToolsVersion "23.0.1"
+buildscript {
+    repositories {
+        google()
+        jcenter()
+    }
+    def buildGradleVersion = ext.has('buildGradlePluginVersion') ? ext.get('buildGradlePluginVersion') : '3.4.1'
 
-    defaultConfig {
-        minSdkVersion 16
-        targetSdkVersion 22
-        versionCode 1
-        versionName "1.0"
+    dependencies {
+        classpath "com.android.tools.build:gradle:$buildGradleVersion"
     }
 }
 
-dependencies {
-    compile 'com.facebook.react:react-native:+'
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion safeExtGet('compileSdkVersion', 28)
+    buildToolsVersion safeExtGet('buildToolsVersion', '28.0.3')
+
+    defaultConfig {
+        minSdkVersion safeExtGet('minSdkVersion', 16)
+        targetSdkVersion safeExtGet('targetSdkVersion', 27)
+        versionCode 11
+        versionName "1.1"
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_7
+        targetCompatibility JavaVersion.VERSION_1_7
+    }
 }
-  
+
+repositories {
+    google()
+    jcenter()
+    mavenCentral()
+}
+
+dependencies {
+    api "com.facebook.react:react-native:${safeExtGet('reactNative', '+')}"
+}
