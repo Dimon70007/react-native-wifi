@@ -13,6 +13,7 @@ import com.facebook.react.shell.MainReactPackage;
 import com.facebook.soloader.SoLoader;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
@@ -34,8 +35,8 @@ import android.content.IntentFilter;
 import android.content.BroadcastReceiver;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import android.util.Log;
 import android.widget.Toast;
 import java.util.List;
@@ -213,6 +214,7 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 	}
 
 	//Method to connect to WIFI Network
+	@SuppressLint("MissingPermission")
 	public Boolean connectTo(ScanResult result, String password, String ssid) {
 		//Make new configuration
 		WifiConfiguration conf = new WifiConfiguration();
@@ -263,6 +265,7 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 			return false;
 		}
 		//Remove the existing configuration for this netwrok
+
 		List<WifiConfiguration> mWifiConfigList = wifi.getConfiguredNetworks();
 
 		int updateNetwork = -1;
@@ -359,6 +362,7 @@ public class RNWifiModule extends ReactContextBaseJavaModule {
 
 	//This method will remove the wifi network as per the passed SSID from the device list
 	@ReactMethod
+	@SuppressLint("MissingPermission")
 	public void isRemoveWifiNetwork(String ssid, final Callback callback) {
 		if (!checkPermissions()) {
 			callback.invoke(false);
